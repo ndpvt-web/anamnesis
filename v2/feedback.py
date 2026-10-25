@@ -168,7 +168,7 @@ def confirm_surfaced_nodes(db, agent_id: str, session_id: str,
 
     if count:
         db.commit()
-        msg = f"[hermes-v2] confirm_surfaced_nodes: confirmed {count}/{len(rows)} nodes"
+        msg = f"[anamnesis] confirm_surfaced_nodes: confirmed {count}/{len(rows)} nodes"
         if action_context:
             msg += f" (top_sim={top_sim:.3f})"
         if edges_created:
@@ -212,7 +212,7 @@ def refute_surfaced_nodes(db, agent_id: str, session_id: str,
 
     if count:
         db.commit()
-        print(f"[hermes-v2] refute_surfaced_nodes: refuted {count} nodes for session {session_id}", file=sys.stderr)
+        print(f"[anamnesis] refute_surfaced_nodes: refuted {count} nodes for session {session_id}", file=sys.stderr)
 
     return count
 
@@ -255,7 +255,7 @@ def record_irrelevance(db, agent_id: str, session_id: str) -> int:
 
     if count:
         db.commit()
-        print(f"[hermes-v2] record_irrelevance: marked {count} nodes irrelevant for session {session_id}", file=sys.stderr)
+        print(f"[anamnesis] record_irrelevance: marked {count} nodes irrelevant for session {session_id}", file=sys.stderr)
 
     return count
 
@@ -266,12 +266,12 @@ def apply_explicit_feedback(db, node_id: int, feedback: str) -> dict:
     Returns: {"node_id": int, "new_confidence": float, "feedback": str}"""
     valid_feedback = {"confirmed", "refuted", "irrelevant"}
     if feedback not in valid_feedback:
-        print(f"[hermes-v2] apply_explicit_feedback: invalid feedback '{feedback}'", file=sys.stderr)
+        print(f"[anamnesis] apply_explicit_feedback: invalid feedback '{feedback}'", file=sys.stderr)
         return {"node_id": node_id, "new_confidence": 0.0, "feedback": feedback}
 
     node = v2db.get_node(db, node_id)
     if not node:
-        print(f"[hermes-v2] apply_explicit_feedback: node {node_id} not found", file=sys.stderr)
+        print(f"[anamnesis] apply_explicit_feedback: node {node_id} not found", file=sys.stderr)
         return {"node_id": node_id, "new_confidence": 0.0, "feedback": feedback}
 
     if feedback == "confirmed":
@@ -314,5 +314,5 @@ def apply_explicit_feedback(db, node_id: int, feedback: str) -> dict:
     else:
         new_conf = node.get("confidence", 0.0)
 
-    print(f"[hermes-v2] apply_explicit_feedback: node {node_id} -> {feedback}, conf={new_conf:.3f}", file=sys.stderr)
+    print(f"[anamnesis] apply_explicit_feedback: node {node_id} -> {feedback}, conf={new_conf:.3f}", file=sys.stderr)
     return {"node_id": node_id, "new_confidence": new_conf, "feedback": feedback}

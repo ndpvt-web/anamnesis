@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Hermes Layer 1: Working Memory.
+"""Anamnesis Layer 1: Working Memory.
 
 Session-scoped ephemeral context store. Tracks recent tool calls, errors,
 file touches, and task intent within a single session. Auto-purges stale

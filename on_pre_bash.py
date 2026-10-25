@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Hermes Micro-Cortex Hook: PreToolUse (Bash) - Command guardian.
+"""Anamnesis hook: PreToolUse (Bash) - command guardian.
 Checks bash commands against agent-learned anti-patterns.
 Can BLOCK dangerous commands or inject warnings.
 Must be fast (<50ms) -- keyword matching only, no FTS5."""
@@ -25,16 +25,14 @@ def main():
     if not command:
         return
 
-    agent_id = detect_active_agent()
-    if not agent_id:
-        return
+    agent_id = detect_active_agent(data)
 
     try:
         db = open_db(agent_id)  # Auto-creates DB + schema for new agents
         matches = match_anti_patterns(db, command)
         db.close()
 
-        # --- Hermes v2 fallback (never crash) ---
+        # --- v2 anti-pattern check (never crash) ---
         v2_conn = None
         try:
             import sys as _sys
@@ -56,7 +54,7 @@ def main():
                             "hookEventName": "PreToolUse",
                             "permissionDecision": "deny",
                             "permissionDecisionReason": (
-                                f"HERMES GUARDIAN [{agent_id}]: Blocked by v2 "
+                                f"ANAMNESIS GUARDIAN [{agent_id}]: Blocked by v2 "
                                 f"anti-pattern [{severity_v2.upper()}]: {top_v2['content']}"
                             ),
                             "additionalContext": (
@@ -74,7 +72,7 @@ def main():
                             "hookEventName": "PreToolUse",
                             "permissionDecision": "deny",
                             "permissionDecisionReason": (
-                                f"HERMES GUARDIAN [{agent_id}]: Blocked by v2 "
+                                f"ANAMNESIS GUARDIAN [{agent_id}]: Blocked by v2 "
                                 f"anti-pattern [{severity_v2.upper()}]: {top_v2['content']}"
                             ),
                             "additionalContext": (
@@ -91,7 +89,7 @@ def main():
                         "hookSpecificOutput": {
                             "hookEventName": "PreToolUse",
                             "additionalContext": (
-                                f"HERMES NOTE [{agent_id}]: Learned caution (v2) - "
+                                f"ANAMNESIS NOTE [{agent_id}]: Learned caution (v2) - "
                                 f"{top_v2['content']}"
                             )
                         }
@@ -120,7 +118,7 @@ def main():
                     "hookEventName": "PreToolUse",
                     "permissionDecision": "deny",
                     "permissionDecisionReason": (
-                        f"HERMES GUARDIAN [{agent_id}]: Blocked by learned "
+                        f"ANAMNESIS GUARDIAN [{agent_id}]: Blocked by learned "
                         f"anti-pattern [{severity.upper()}]: {top['content']}"
                     ),
                     "additionalContext": (
@@ -136,7 +134,7 @@ def main():
                 "hookSpecificOutput": {
                     "hookEventName": "PreToolUse",
                     "additionalContext": (
-                        f"HERMES NOTE [{agent_id}]: Learned caution - "
+                        f"ANAMNESIS NOTE [{agent_id}]: Learned caution - "
                         f"{top['content']}"
                     )
                 }

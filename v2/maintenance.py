@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Maintenance cycle for hermes.db (replaces crystallized.py for v2).
+"""Maintenance cycle for the v2 knowledge store (replaces crystallized.py).
 Import: from v2 import db as v2db; from v2 import knowledge_graph as kg"""
 
 import sys
@@ -19,7 +19,7 @@ def maintenance_cycle(db: sqlite3.Connection, agent_id: str) -> dict:
         "nodes_by_layer": {layer: count},
         "total_nodes": int
     }"""
-    print(f"[hermes-v2] Running maintenance cycle for agent={agent_id}", file=sys.stderr)
+    print(f"[anamnesis] Running maintenance cycle for agent={agent_id}", file=sys.stderr)
 
     # Step 1: Decay stale nodes first (lowers confidence before promotion checks)
     decay_result = kg.decay_stale_nodes(db, agent_id, stale_days=30, decay_rate=0.05)
@@ -45,7 +45,7 @@ def maintenance_cycle(db: sqlite3.Connection, agent_id: str) -> dict:
     }
 
     print(
-        f"[hermes-v2] Maintenance done: +{result['promoted']} promoted, "
+        f"[anamnesis] Maintenance done: +{result['promoted']} promoted, "
         f"-{result['demoted']} demoted, {result['decayed']} decayed, "
         f"{result['deprecated']} deprecated, {result['total_nodes']} total nodes",
         file=sys.stderr

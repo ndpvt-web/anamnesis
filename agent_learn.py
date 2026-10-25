@@ -1,15 +1,14 @@
 #!/usr/bin/env python3
-"""Hermes Agent Learning Hook (Stop hook).
-Extracts learnings from session transcript via Haiku LLM,
-writes to per-agent SQLite+FTS5 database instead of flat files.
+"""Anamnesis session-end learning hook (Stop hook).
 
-Replaces the original flat-file agent_learn.py with structured storage."""
+Extracts learnings from the session transcript with a fast LLM and runs
+the v2 reflection pipeline, writing to the agent's SQLite+FTS5 stores.
+LLM provider comes from anamnesis_config; with no API key configured the
+hook still runs maintenance and working-memory cleanup."""
 
 import json
 import os
 import sys
-import urllib.request
-import urllib.error
 from pathlib import Path
 
 # Add parent dir so we can import learnings_db
@@ -17,11 +16,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 from learnings_db import open_db, add_rule, detect_active_agent, log_event
 from crystallized import maintenance_cycle
 from working_memory import purge_session, session_summary, purge_stale
-
-# --- Config ---
-API_URL = "https://ai-gateway.happycapy.ai/api/v1/chat/completions"
-API_KEY = os.environ.get("AI_GATEWAY_API_KEY", "")
-MODEL = os.environ.get("CORTEX_FAST_MODEL", "anthropic/claude-haiku-4.5")
+from v2 import llm
 
 NOISE_PATTERNS = [
     "session is being continued from a previous",
@@ -68,12 +63,8 @@ def main():
     session_id = data.get("session_id", "")
     if not transcript_path or not Path(transcript_path).exists():
         return
-    if not API_KEY:
-        return
 
-    agent_id = detect_active_agent()
-    if not agent_id:
-        return
+    agent_id = detect_active_agent(data)
 
     messages = _extract_messages(transcript_path, limit=15)
     if len(messages) < 2:
@@ -85,7 +76,7 @@ def main():
     if len(transcript_text) > 4000:
         transcript_text = transcript_text[:4000] + "\n[...truncated]"
 
-    # --- Hermes v2: Try Sonnet reflection first ---
+    # --- v2 reflection pipeline first ---
     v2_succeeded = False
     try:
         import sys as _sys
@@ -115,7 +106,7 @@ def main():
     if v2_succeeded:
         learnings = None
     else:
-        _log("v2 did not succeed, falling back to v1 Haiku extraction")
+        _log("v2 did not succeed, falling back to v1 fast-model extraction")
         learnings = _call_haiku(transcript_text)
     if not learnings:
         return
@@ -222,39 +213,14 @@ def _extract_messages(transcript_path, limit=15):
 
 
 def _call_haiku(transcript_text):
-    """Call Haiku via AI Gateway. Returns parsed JSON or None."""
+    """Extract learnings with the configured fast model. Returns JSON or None."""
     prompt = EXTRACT_PROMPT.format(transcript=transcript_text)
-    try:
-        payload = json.dumps({
-            "model": MODEL,
-            "messages": [{"role": "user", "content": prompt}],
-            "max_tokens": 800,
-            "temperature": 0,
-        }).encode("utf-8")
-        headers = {
-            "Content-Type": "application/json",
-            "Authorization": f"Bearer {API_KEY}",
-            "Accept": "application/json",
-            "User-Agent": "CapyAgentLearn/1.0",
-        }
-        req = urllib.request.Request(API_URL, data=payload, headers=headers)
-        with urllib.request.urlopen(req, timeout=20) as resp:
-            data = json.loads(resp.read().decode("utf-8"))
-            content = data["choices"][0]["message"]["content"].strip()
-            if content.startswith("```"):
-                lines = content.split("\n")
-                inner = "\n".join(lines[1:])
-                if "```" in inner:
-                    inner = inner[:inner.rfind("```")]
-                content = inner.strip()
-            return json.loads(content)
-    except Exception as e:
-        _log(f"Haiku call failed: {type(e).__name__}: {e}")
-        return None
+    return llm.chat_json("You are a learning extractor for an AI agent.",
+                         prompt, purpose="fast", timeout=20, max_tokens=800)
 
 
 def _log(msg):
-    print(f"[hermes-learn] {msg}", file=sys.stderr)
+    print(f"[anamnesis-learn] {msg}", file=sys.stderr)
 
 
 if __name__ == "__main__":

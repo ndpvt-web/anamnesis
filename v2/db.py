@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Hermes v2 Core Database Library.
+"""Anamnesis Core Database Library.
 
-Manages hermes.db -- the v2 knowledge store with 8 tables implementing
+Manages anamnesis.db -- the knowledge store with 8 tables implementing
 the Aristotelian five-layer memory stack.
 
 Tables:
@@ -20,6 +20,8 @@ import sqlite3
 import json
 import re
 import os
+import shutil
+import sys
 from pathlib import Path
 from datetime import datetime, timedelta
 
@@ -27,8 +29,13 @@ from datetime import datetime, timedelta
 # Constants
 # ---------------------------------------------------------------------------
 
-HAPPYCAPY_DIR = Path.home() / ".happycapy"
-AGENTS_DIR = HAPPYCAPY_DIR / "agents"
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+import anamnesis_config
+
+# Legacy on-disk layout from early releases (internal history, kept only
+# so existing stores upgrade in place without data loss).
+_LEGACY_SUBDIR = "hermes"
+_LEGACY_DB_NAME = "hermes.db"
 
 # Confidence thresholds
 MIN_CONFIDENCE = 0.50
@@ -77,14 +84,37 @@ STOP_WORDS = frozenset({
 # Path helpers
 # ---------------------------------------------------------------------------
 
-def hermes_dir_for_agent(agent_id: str) -> Path:
-    """Return path to agent's hermes/ directory."""
-    return AGENTS_DIR / agent_id / "hermes"
+def store_dir_for_agent(agent_id: str) -> Path:
+    """Return path to the agent's knowledge-store directory."""
+    return anamnesis_config.agents_dir() / agent_id
 
 
 def db_path_for_agent(agent_id: str) -> Path:
-    """Return path to agent's hermes.db."""
-    return hermes_dir_for_agent(agent_id) / "hermes.db"
+    """Return path to the agent's anamnesis.db.
+
+    If the canonical file is missing but a legacy hermes/hermes.db store
+    exists for the same agent, it is copied forward (non-destructive,
+    idempotent): the legacy file stays untouched as a backup and the
+    copy becomes the live database."""
+    canonical = store_dir_for_agent(agent_id) / "anamnesis.db"
+    if not canonical.exists():
+        legacy = store_dir_for_agent(agent_id) / _LEGACY_SUBDIR / _LEGACY_DB_NAME
+        if legacy.exists():
+            canonical.parent.mkdir(parents=True, exist_ok=True)
+            tmp = canonical.with_suffix(".db.migrating")
+            try:
+                shutil.copyfile(str(legacy), str(tmp))
+                os.replace(str(tmp), str(canonical))
+                print(f"[anamnesis] migrated legacy knowledge store for "
+                      f"agent '{agent_id}' -> {canonical}", file=sys.stderr)
+            except Exception as e:
+                try:
+                    tmp.unlink(missing_ok=True)
+                except Exception:
+                    pass
+                print(f"[anamnesis] legacy store migration failed ({e}); "
+                      f"starting with an empty database", file=sys.stderr)
+    return canonical
 
 
 # ---------------------------------------------------------------------------
@@ -92,7 +122,7 @@ def db_path_for_agent(agent_id: str) -> Path:
 # ---------------------------------------------------------------------------
 
 def open_db(agent_id: str) -> sqlite3.Connection:
-    """Open (and init if needed) the agent's hermes.db."""
+    """Open (and init if needed) the agent's anamnesis.db."""
     path = db_path_for_agent(agent_id)
     path.parent.mkdir(parents=True, exist_ok=True)
     db = sqlite3.connect(str(path), timeout=5.0)
@@ -829,7 +859,7 @@ def get_axioms(db: sqlite3.Connection, agent_id: str) -> list:
 # ---------------------------------------------------------------------------
 
 def get_stats(db: sqlite3.Connection, agent_id: str) -> dict:
-    """Get comprehensive stats for an agent's hermes.db."""
+    """Get comprehensive stats for an agent's knowledge store."""
     stats = {}
 
     # Node counts by layer

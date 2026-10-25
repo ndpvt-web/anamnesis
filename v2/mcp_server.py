@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Hermes v2 MCP Server (stdio, JSON-RPC 2.0).
+"""Anamnesis MCP Server (stdio, JSON-RPC 2.0).
 Provides 5 tools for active agent cognition.
-Launched by Claude Code as configured in settings.json.
+Works with any MCP client; see docs/INTEGRATIONS.md for configuration.
 Import: from v2 import db, retrieval, feedback, knowledge_graph as kg"""
 
 import json
@@ -17,13 +17,13 @@ from learnings_db import detect_active_agent
 
 # MCP Protocol constants
 PROTOCOL_VERSION = "2024-11-05"
-SERVER_NAME = "hermes-v2"
-SERVER_VERSION = "2.0.0"
+SERVER_NAME = "anamnesis"
+SERVER_VERSION = "3.1.0"
 
 # 5 MCP Tools
 TOOLS = [
     {
-        "name": "hermes_recall",
+        "name": "anamnesis_recall",
         "description": "Search agent's knowledge base. Returns relevant learnings for a query.",
         "inputSchema": {
             "type": "object",
@@ -40,7 +40,7 @@ TOOLS = [
         }
     },
     {
-        "name": "hermes_record",
+        "name": "anamnesis_record",
         "description": "Immediately record a learning without waiting for session-end reflection.",
         "inputSchema": {
             "type": "object",
@@ -66,7 +66,7 @@ TOOLS = [
         }
     },
     {
-        "name": "hermes_feedback",
+        "name": "anamnesis_feedback",
         "description": "Provide explicit feedback on a knowledge node (confirm, refute, or mark irrelevant).",
         "inputSchema": {
             "type": "object",
@@ -82,7 +82,7 @@ TOOLS = [
         }
     },
     {
-        "name": "hermes_status",
+        "name": "anamnesis_status",
         "description": "Get memory statistics: node counts by layer, feedback stats, health metrics.",
         "inputSchema": {
             "type": "object",
@@ -90,7 +90,7 @@ TOOLS = [
         }
     },
     {
-        "name": "hermes_graph",
+        "name": "anamnesis_graph",
         "description": "Explore the knowledge graph from a specific node. Returns related nodes and edges.",
         "inputSchema": {
             "type": "object",
@@ -152,8 +152,8 @@ def _handle_tools_list(request_id) -> dict:
     return _make_response(request_id, {"tools": TOOLS})
 
 
-def _tool_hermes_recall(args: dict) -> dict:
-    """Execute hermes_recall tool."""
+def _tool_anamnesis_recall(args: dict) -> dict:
+    """Execute anamnesis_recall tool."""
     query = args.get("query", "").strip()
     if not query:
         return _make_tool_result("Error: query is required.", is_error=True)
@@ -173,7 +173,7 @@ def _tool_hermes_recall(args: dict) -> dict:
         if results:
             v2db.record_surfaced(db, agent_id, "", [r["id"] for r in results])
     except Exception as e:
-        print(f"[hermes-v2] hermes_recall error: {e}", file=sys.stderr)
+        print(f"[anamnesis] anamnesis_recall error: {e}", file=sys.stderr)
         return _make_tool_result(f"Error: {e}", is_error=True)
     finally:
         if db:
@@ -186,7 +186,7 @@ def _tool_hermes_recall(args: dict) -> dict:
     if not results:
         return _make_tool_result(f"No results found for query: {query}")
 
-    lines = [f"## Hermes v2 Recall: {query} ({agent_id})", ""]
+    lines = [f"## Anamnesis Recall: {query} ({agent_id})", ""]
     for i, r in enumerate(results, 1):
         layer = r.get("layer", "?").upper()
         conf = r.get("confidence", 0.0)
@@ -219,8 +219,8 @@ def _tool_hermes_recall(args: dict) -> dict:
     return _make_tool_result("\n".join(lines))
 
 
-def _tool_hermes_record(args: dict) -> dict:
-    """Execute hermes_record tool."""
+def _tool_anamnesis_record(args: dict) -> dict:
+    """Execute anamnesis_record tool."""
     content = args.get("content", "").strip()
     if not content:
         return _make_tool_result("Error: content is required.", is_error=True)
@@ -247,7 +247,7 @@ def _tool_hermes_record(args: dict) -> dict:
             severity=severity,
         )
     except Exception as e:
-        print(f"[hermes-v2] hermes_record error: {e}", file=sys.stderr)
+        print(f"[anamnesis] anamnesis_record error: {e}", file=sys.stderr)
         return _make_tool_result(f"Error: {e}", is_error=True)
     finally:
         if db:
@@ -269,8 +269,8 @@ def _tool_hermes_record(args: dict) -> dict:
     )
 
 
-def _tool_hermes_feedback(args: dict) -> dict:
-    """Execute hermes_feedback tool."""
+def _tool_anamnesis_feedback(args: dict) -> dict:
+    """Execute anamnesis_feedback tool."""
     node_id = args.get("node_id")
     feedback_val = args.get("feedback", "").strip()
 
@@ -291,7 +291,7 @@ def _tool_hermes_feedback(args: dict) -> dict:
         db = v2db.open_db(agent_id)
         result = feedback.apply_explicit_feedback(db, int(node_id), feedback_val)
     except Exception as e:
-        print(f"[hermes-v2] hermes_feedback error: {e}", file=sys.stderr)
+        print(f"[anamnesis] anamnesis_feedback error: {e}", file=sys.stderr)
         return _make_tool_result(f"Error: {e}", is_error=True)
     finally:
         if db:
@@ -313,8 +313,8 @@ def _tool_hermes_feedback(args: dict) -> dict:
     )
 
 
-def _tool_hermes_status(args: dict) -> dict:
-    """Execute hermes_status tool."""
+def _tool_anamnesis_status(args: dict) -> dict:
+    """Execute anamnesis_status tool."""
     agent_id = detect_active_agent()
     if not agent_id:
         return _make_tool_result("Error: no active agent detected.", is_error=True)
@@ -324,7 +324,7 @@ def _tool_hermes_status(args: dict) -> dict:
         db = v2db.open_db(agent_id)
         stats = v2db.get_stats(db, agent_id)
     except Exception as e:
-        print(f"[hermes-v2] hermes_status error: {e}", file=sys.stderr)
+        print(f"[anamnesis] anamnesis_status error: {e}", file=sys.stderr)
         return _make_tool_result(f"Error: {e}", is_error=True)
     finally:
         if db:
@@ -334,7 +334,7 @@ def _tool_hermes_status(args: dict) -> dict:
     maturity = stats.get("maturity", {})
 
     lines = [
-        f"## Hermes v2 Status: {agent_id}",
+        f"## Anamnesis Status: {agent_id}",
         "",
         "### Node Counts by Layer",
         f"  Sophia (axioms):    {nodes_by_layer.get('sophia', 0)}",
@@ -359,8 +359,8 @@ def _tool_hermes_status(args: dict) -> dict:
     return _make_tool_result("\n".join(lines))
 
 
-def _tool_hermes_graph(args: dict) -> dict:
-    """Execute hermes_graph tool."""
+def _tool_anamnesis_graph(args: dict) -> dict:
+    """Execute anamnesis_graph tool."""
     node_id = args.get("node_id")
     if node_id is None:
         return _make_tool_result("Error: node_id is required.", is_error=True)
@@ -384,14 +384,14 @@ def _tool_hermes_graph(args: dict) -> dict:
             max_nodes=20
         )
     except Exception as e:
-        print(f"[hermes-v2] hermes_graph error: {e}", file=sys.stderr)
+        print(f"[anamnesis] anamnesis_graph error: {e}", file=sys.stderr)
         return _make_tool_result(f"Error: {e}", is_error=True)
     finally:
         if db:
             db.close()
 
     lines = [
-        f"## Hermes v2 Graph: Node {node_id} ({agent_id})",
+        f"## Anamnesis Graph: Node {node_id} ({agent_id})",
         "",
         "### Seed Node",
         f"  ID:         {seed_node.get('id')}",
@@ -426,11 +426,11 @@ def _tool_hermes_graph(args: dict) -> dict:
 def _handle_tools_call(request_id, tool_name: str, arguments: dict) -> dict:
     """Dispatch to appropriate tool handler. Returns JSON-RPC result."""
     dispatch = {
-        "hermes_recall": _tool_hermes_recall,
-        "hermes_record": _tool_hermes_record,
-        "hermes_feedback": _tool_hermes_feedback,
-        "hermes_status": _tool_hermes_status,
-        "hermes_graph": _tool_hermes_graph,
+        "anamnesis_recall": _tool_anamnesis_recall,
+        "anamnesis_record": _tool_anamnesis_record,
+        "anamnesis_feedback": _tool_anamnesis_feedback,
+        "anamnesis_status": _tool_anamnesis_status,
+        "anamnesis_graph": _tool_anamnesis_graph,
     }
 
     handler = dispatch.get(tool_name)
@@ -440,7 +440,7 @@ def _handle_tools_call(request_id, tool_name: str, arguments: dict) -> dict:
         try:
             result = handler(arguments or {})
         except Exception as e:
-            print(f"[hermes-v2] tool {tool_name} unhandled error: {e}", file=sys.stderr)
+            print(f"[anamnesis] tool {tool_name} unhandled error: {e}", file=sys.stderr)
             result = _make_tool_result(f"Internal error: {e}", is_error=True)
 
     return _make_response(request_id, result)
@@ -450,9 +450,9 @@ def main():
     """stdio MCP server main loop.
     Reads JSON-RPC 2.0 messages from stdin, writes responses to stdout.
     Handles: initialize, tools/list, tools/call.
-    Must detect active agent via detect_active_agent().
-    Opens DB connection per request (stateless)."""
-    print(f"[hermes-v2] MCP server starting (pid={__import__('os').getpid()})", file=sys.stderr)
+    Agent identity resolves via anamnesis_config (env, config, or
+    provisioned default). Opens DB connection per request (stateless)."""
+    print(f"[anamnesis] MCP server starting (pid={__import__('os').getpid()})", file=sys.stderr)
 
     for raw_line in sys.stdin:
         raw_line = raw_line.strip()
@@ -462,7 +462,7 @@ def main():
         try:
             msg = json.loads(raw_line)
         except json.JSONDecodeError as e:
-            print(f"[hermes-v2] JSON parse error: {e}", file=sys.stderr)
+            print(f"[anamnesis] JSON parse error: {e}", file=sys.stderr)
             # Cannot determine request id; skip
             continue
 
@@ -470,7 +470,7 @@ def main():
         method = msg.get("method", "")
         params = msg.get("params") or {}
 
-        print(f"[hermes-v2] method={method} id={request_id}", file=sys.stderr)
+        print(f"[anamnesis] method={method} id={request_id}", file=sys.stderr)
 
         if method == "initialize":
             response = _handle_initialize(request_id)
@@ -495,7 +495,7 @@ def main():
             sys.stdout.write(json.dumps(response) + "\n")
             sys.stdout.flush()
         except Exception as e:
-            print(f"[hermes-v2] write error: {e}", file=sys.stderr)
+            print(f"[anamnesis] write error: {e}", file=sys.stderr)
 
 
 if __name__ == "__main__":

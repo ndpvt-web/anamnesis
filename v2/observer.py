@@ -42,7 +42,7 @@ def safe_append_event(agent_id: str, event_type: str,
         finally:
             db.close()
     except Exception as e:
-        print(f"[hermes-v2] safe_append_event failed: {e}", file=sys.stderr)
+        print(f"[anamnesis] safe_append_event failed: {e}", file=sys.stderr)
         return -1
 
 
@@ -72,5 +72,5 @@ def safe_record_aisthesis(agent_id: str, session_id: str,
         finally:
             db.close()
     except Exception as e:
-        print(f"[hermes-v2] safe_record_aisthesis failed: {e}", file=sys.stderr)
+        print(f"[anamnesis] safe_record_aisthesis failed: {e}", file=sys.stderr)
         return -1

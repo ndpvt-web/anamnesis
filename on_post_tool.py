@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Hermes Micro-Cortex Hook: PostToolUse.
+"""Anamnesis hook: PostToolUse.
 
 Three functions across two layers:
   Layer 1 (Working Memory): Record every tool event for session context
@@ -67,9 +67,7 @@ def main():
     if tool_name in SKIP_TOOLS:
         return
 
-    agent_id = detect_active_agent()
-    if not agent_id:
-        return
+    agent_id = detect_active_agent(data)
 
     tool_response = str(data.get("tool_response", ""))
     session_id = data.get("session_id", "")
@@ -111,7 +109,7 @@ def main():
             fixes = match_error_fixes(db, error_snippet, top_k=2)
             context_parts = []
             if fixes:
-                lines = ["## Hermes: Relevant Learnings for This Error"]
+                lines = ["## Anamnesis: Relevant Learnings for This Error"]
                 for f in fixes:
                     mat = f.get("maturity", "")
                     proven = " [PROVEN]" if mat == "crystallized" else ""
@@ -158,7 +156,7 @@ def main():
 
         db.close()
 
-        # --- Hermes v2 dual-write (never crash) ---
+        # --- v2 event capture + feedback (never crash) ---
         v2_conn = None
         try:
             import re as _re

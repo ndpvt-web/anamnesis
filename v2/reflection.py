@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
-"""5-step Sonnet reflection pipeline: Narrate->Diagnose->Hypothesize->Validate->Store.
+"""5-step LLM reflection pipeline: Narrate->Diagnose->Hypothesize->Validate->Store.
 Triggered at session end by agent_learn.py.
+LLM provider is resolved via anamnesis_config (any OpenAI-compatible
+endpoint or native Anthropic); the pipeline degrades to 'failed' cleanly
+when no API key is configured.
 Import: from v2 import db as v2db, prompts, knowledge_graph as kg"""
 
 import sqlite3
@@ -8,8 +11,6 @@ import json
 import os
 import sys
 import time
-import urllib.request
-import urllib.error
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -17,14 +18,12 @@ from v2 import db as v2db
 from v2 import prompts
 from v2 import knowledge_graph as kg
 from v2 import retrieval as v2ret
+from v2 import llm
 
 # ---------------------------------------------------------------------------
 # Configuration
 # ---------------------------------------------------------------------------
 
-API_URL = "https://ai-gateway.happycapy.ai/api/v1/chat/completions"
-API_KEY = os.environ.get("AI_GATEWAY_API_KEY", "")
-MODEL = "anthropic/claude-sonnet-4.6"
 MAX_EVENTS = 30
 TIMEOUT_SECONDS = 120  # Budget for all 4 LLM calls (structured prompts need ~14s each)
 PER_CALL_MAX = 30      # Max per LLM call (WHEN/THEN/BECAUSE responses need ~14s)
@@ -51,7 +50,7 @@ def run_reflection_pipeline(agent_id: str, session_id: str) -> dict:
             duration_ms=duration, error_text=error_msg
         )
         db.close()
-        print(f"[hermes-v2] reflection failed: {error_msg}", file=sys.stderr)
+        print(f"[anamnesis] reflection failed: {error_msg}", file=sys.stderr)
         return {
             "status": "failed", "nodes_created": 0, "edges_created": 0,
             "run_id": run_id, "duration_ms": duration, "error": error_msg
@@ -68,7 +67,7 @@ def run_reflection_pipeline(agent_id: str, session_id: str) -> dict:
                 events_processed=len(events), duration_ms=duration
             )
             db.close()
-            print(f"[hermes-v2] reflection skipped: only {len(events)} events", file=sys.stderr)
+            print(f"[anamnesis] reflection skipped: only {len(events)} events", file=sys.stderr)
             return {
                 "status": "skipped", "nodes_created": 0, "edges_created": 0,
                 "run_id": run_id, "duration_ms": duration, "error": ""
@@ -180,7 +179,7 @@ def run_reflection_pipeline(agent_id: str, session_id: str) -> dict:
         db.close()
 
         print(
-            f"[hermes-v2] reflection completed: +{nodes_created} nodes, "
+            f"[anamnesis] reflection completed: +{nodes_created} nodes, "
             f"+{edges_created} edges, {duration}ms",
             file=sys.stderr
         )
@@ -265,11 +264,11 @@ def _step_diagnose(narration: dict, error_events: list, timeout: float = 2.0) ->
         narration_json=narration_json,
         error_events_json=error_events_json
     )
-    print(f"[hermes-v2] diagnose: narration keys={list(narration.keys())}, "
+    print(f"[anamnesis] diagnose: narration keys={list(narration.keys())}, "
           f"error_events={len(error_events)}, timeout={timeout:.1f}s", file=sys.stderr)
     result = _call_llm(prompts.REFLECTION_SYSTEM_PROMPT, prompt, timeout=timeout)
     if result is None:
-        print(f"[hermes-v2] diagnose: _call_llm returned None", file=sys.stderr)
+        print(f"[anamnesis] diagnose: _call_llm returned None", file=sys.stderr)
         return None
     return {
         "errors_diagnosed": result.get("errors_diagnosed", []),
@@ -375,7 +374,7 @@ def _step_store(db: sqlite3.Connection, agent_id: str, session_id: str,
         # v3 Quality Gate: compute salience and reject platitudes
         salience = _compute_salience(h)
         if salience < SALIENCE_THRESHOLD:
-            print(f"[hermes-v2] quality gate REJECTED (salience={salience:.2f}): "
+            print(f"[anamnesis] quality gate REJECTED (salience={salience:.2f}): "
                   f"{content[:60]}", file=sys.stderr)
             continue
 
@@ -410,7 +409,7 @@ def _step_store(db: sqlite3.Connection, agent_id: str, session_id: str,
             nodes_created += 1
             hypothesis_node_ids[idx] = node_id
             print(
-                f"[hermes-v2] stored node {node_id} (salience={salience:.2f}, "
+                f"[anamnesis] stored node {node_id} (salience={salience:.2f}, "
                 f"domain={h_domain}): {content[:60]}",
                 file=sys.stderr
             )
@@ -441,7 +440,7 @@ def _step_store(db: sqlite3.Connection, agent_id: str, session_id: str,
             )
             db.commit()
             hypothesis_node_ids[idx] = existing_node_id
-            print(f"[hermes-v2] merged into node {existing_node_id}: {merged_content[:60]}", file=sys.stderr)
+            print(f"[anamnesis] merged into node {existing_node_id}: {merged_content[:60]}", file=sys.stderr)
 
             # DERIVED_FROM edge: trace merge lineage
             # Find the most recent node from this session (if any)
@@ -457,7 +456,7 @@ def _step_store(db: sqlite3.Connection, agent_id: str, session_id: str,
                 if eid > 0:
                     edges_created += 1
         except Exception as e:
-            print(f"[hermes-v2] merge update failed: {e}", file=sys.stderr)
+            print(f"[anamnesis] merge update failed: {e}", file=sys.stderr)
 
     # --- Intra-session SUPPORTS edges (co-accepted hypotheses share evidence) ---
     accepted_node_ids = [nid for nid in hypothesis_node_ids.values() if nid > 0]
@@ -538,80 +537,11 @@ def _step_store(db: sqlite3.Connection, agent_id: str, session_id: str,
 # ---------------------------------------------------------------------------
 
 def _call_llm(system_prompt: str, user_prompt: str,
-              timeout: float = 2.0) -> dict:
-    """Call Sonnet via AI Gateway. Returns parsed JSON dict or None.
-    Uses urllib.request (no external deps).
-    Strips markdown code fences from response.
-    Timeout per call: 2 seconds."""
-    if not API_KEY:
-        print("[hermes-v2] AI_GATEWAY_API_KEY not set", file=sys.stderr)
-        return None
+              timeout: float = 30.0) -> dict:
+    """Call the configured LLM. Returns parsed JSON dict or None.
 
-    payload = {
-        "model": MODEL,
-        "max_tokens": 4096,
-        "temperature": 0,
-        "messages": [
-            {"role": "user", "content": user_prompt}
-        ],
-        "system": system_prompt,
-    }
-    body = json.dumps(payload).encode("utf-8")
-    req = urllib.request.Request(
-        API_URL,
-        data=body,
-        headers={
-            "Content-Type": "application/json",
-            "Authorization": f"Bearer {API_KEY}",
-            "User-Agent": "hermes-v2/1.0",
-        },
-        method="POST"
-    )
-
-    try:
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
-            raw = resp.read().decode("utf-8")
-    except urllib.error.HTTPError as e:
-        body = ""
-        try:
-            body = e.read().decode("utf-8", errors="replace")[:500]
-        except Exception:
-            pass
-        print(f"[hermes-v2] LLM HTTP error {e.code}: {e.reason} body={body}", file=sys.stderr)
-        return None
-    except urllib.error.URLError as e:
-        print(f"[hermes-v2] LLM URL error: {e.reason}", file=sys.stderr)
-        return None
-    except Exception as e:
-        print(f"[hermes-v2] LLM call error ({type(e).__name__}): {e}", file=sys.stderr)
-        return None
-
-    try:
-        response_data = json.loads(raw)
-    except json.JSONDecodeError as e:
-        print(f"[hermes-v2] LLM response JSON parse error: {e}\nRaw: {raw[:300]}", file=sys.stderr)
-        return None
-
-    # Extract content from response
-    try:
-        content = response_data["choices"][0]["message"]["content"]
-    except (KeyError, IndexError, TypeError) as e:
-        print(f"[hermes-v2] LLM response structure error: {e}\nResponse: {json.dumps(response_data)[:300]}", file=sys.stderr)
-        return None
-
-    # Strip markdown code fences if present
-    content = content.strip()
-    if content.startswith("```"):
-        # Remove opening fence (e.g. ```json or ```)
-        first_newline = content.find("\n")
-        if first_newline != -1:
-            content = content[first_newline + 1:]
-        # Remove closing fence
-        if content.endswith("```"):
-            content = content[:-3].rstrip()
-
-    try:
-        return json.loads(content)
-    except json.JSONDecodeError as e:
-        print(f"[hermes-v2] LLM content JSON parse error: {e}\nContent: {content[:500]}", file=sys.stderr)
-        return None
+    Provider, model, and credentials come from anamnesis_config via
+    v2.llm; see docs/INTEGRATIONS.md for supported providers."""
+    return llm.chat_json(system_prompt, user_prompt,
+                         purpose="reflection", timeout=timeout,
+                         max_tokens=4096)

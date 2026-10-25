@@ -1,28 +1,19 @@
 #!/usr/bin/env python3
-"""Hermes Hook: SessionStart - Morning briefing.
+"""Anamnesis hook: SessionStart - briefing.
 
 Injects top anti-patterns, preferences, and principles from the agent's
-own learnings.db into the session context. Also pulls from global cortex.db
-as a supplementary source (read-only, for backward compatibility).
-
-Replaces the old cortex on_session_start.py which queried WRONG legacy tables.
-This version queries the UNIFIED rules table via FTS5.
+own knowledge stores into the session context.
 
 Must be fast (<200ms) -- pure SQLite queries, no LLM calls.
 Zero external dependencies. stdlib only."""
 
 import json
 import sys
-import sqlite3
 from pathlib import Path
-from datetime import datetime
 
 sys.path.insert(0, str(Path(__file__).parent))
 from learnings_db import detect_active_agent, open_db, log_event
 from crystallized import maintenance_cycle
-
-# Global cortex.db for supplementary rules (read-only)
-CORTEX_DB_PATH = Path.home() / ".claude" / "skills" / "capy-cortex" / "cortex.db"
 
 # Noise filter
 NOISE_SUBSTRINGS = [
@@ -69,45 +60,13 @@ def _query_agent_rules(db):
     return results
 
 
-def _query_cortex_supplementary():
-    """Pull high-confidence rules from global cortex.db (read-only).
-    Only used as a supplement when agent's own DB is sparse."""
-    if not CORTEX_DB_PATH.exists():
-        return {"anti_pattern": [], "preference": [], "principle": []}
-    try:
-        db = sqlite3.connect(str(CORTEX_DB_PATH))
-        db.row_factory = sqlite3.Row
-        db.execute("PRAGMA journal_mode=WAL")
-        db.execute("PRAGMA busy_timeout=2000")
-        results = {"anti_pattern": [], "preference": [], "principle": []}
-        # Query the UNIFIED rules table (not the broken legacy tables)
-        for cat in results:
-            rows = db.execute("""
-                SELECT content, confidence, helpful_count
-                FROM rules
-                WHERE category = ? AND maturity != 'deprecated'
-                AND confidence >= 0.7
-                ORDER BY helpful_count DESC, confidence DESC
-                LIMIT 5
-            """, (cat,)).fetchall()
-            for r in rows:
-                if not _is_noise(r["content"]):
-                    results[cat].append(dict(r))
-        db.close()
-        return results
-    except Exception:
-        return {"anti_pattern": [], "preference": [], "principle": []}
-
-
 def main():
     try:
         data = json.loads(sys.stdin.read())
     except Exception:
         data = {}
 
-    agent_id = detect_active_agent()
-    if not agent_id:
-        return
+    agent_id = detect_active_agent(data)
 
     try:
         db = open_db(agent_id)
@@ -133,7 +92,7 @@ def main():
         })
         db.close()
 
-        # --- Hermes v2 dual-write (event capture + maintenance, never crash) ---
+        # --- v2 event capture + briefing (never crash) ---
         _v2_briefing = ""
         v2_conn = None
         try:
@@ -168,22 +127,12 @@ def main():
                 except Exception:
                     pass
 
-        # Supplement from cortex.db if agent's DB is sparse
-        cortex_rules = {"anti_pattern": [], "preference": [], "principle": []}
-        if rule_count < 20:
-            cortex_rules = _query_cortex_supplementary()
-
-        # Merge: agent rules first, then cortex supplement (deduplicated)
+        # Deduplicate agent rules
         merged = {}
         for cat in ("anti_pattern", "preference", "principle"):
             seen_content = set()
             merged[cat] = []
             for r in agent_rules.get(cat, []):
-                key = r["content"].lower().strip()
-                if key not in seen_content:
-                    seen_content.add(key)
-                    merged[cat].append(r)
-            for r in cortex_rules.get(cat, []):
                 key = r["content"].lower().strip()
                 if key not in seen_content:
                     seen_content.add(key)
@@ -196,7 +145,7 @@ def main():
         princs = merged["principle"][:MAX_PRINCIPLES]
 
         if anti or prefs or princs:
-            lines.append(f"## Cortex v3: Knowledge")
+            lines.append(f"## Anamnesis: Knowledge")
             lines.append(f"({rule_count} rules, agent: {agent_id})\n")
 
         if anti:

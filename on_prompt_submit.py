@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Hermes Micro-Cortex Hook: UserPromptSubmit.
+"""Anamnesis hook: UserPromptSubmit.
 
 Multi-layer retrieval:
   Layer 1 (Working Memory): Recent session context -- errors, commands, files
@@ -33,9 +33,7 @@ def main():
     if len(prompt) < MIN_PROMPT_LENGTH:
         return
 
-    agent_id = detect_active_agent()
-    if not agent_id:
-        return
+    agent_id = detect_active_agent(data)
 
     try:
         db = open_db(agent_id)  # Auto-creates DB + schema for new agents
@@ -53,7 +51,7 @@ def main():
         if rules:
             if session_id:
                 record_surfaced(db, session_id, [r["id"] for r in rules])
-            lines = [f"## Hermes Agent Learnings ({agent_id})"]
+            lines = [f"## Anamnesis Learnings ({agent_id})"]
             for r in rules:
                 helpful = r.get("helpful_count") or 0
                 help_mark = f" +{helpful}" if helpful else ""
@@ -67,7 +65,7 @@ def main():
                 )
             sections.append("\n".join(lines))
 
-        # --- Hermes v2 dual-write (never crash) ---
+        # --- v2 retrieval (never crash) ---
         v2_conn = None
         try:
             import sys as _sys
@@ -99,7 +97,7 @@ def main():
             if v2_results:
                 v2db.record_surfaced(v2_conn, agent_id, session_id,
                                      [r['id'] for r in v2_results])
-                v2_lines = [f"## Hermes v2: Knowledge Graph ({agent_id})"]
+                v2_lines = [f"## Anamnesis: Knowledge Graph ({agent_id})"]
                 for r in v2_results:
                     layer_tag = f"[{r['layer'].upper()}]" if r.get('layer') else ""
                     v2_lines.append(

@@ -16,13 +16,8 @@ failed = 0
 
 
 def check(name, condition, detail=""):
-    global passed, failed
-    if condition:
-        passed += 1
-        print(f"  PASS: {name}")
-    else:
-        failed += 1
-        print(f"  FAIL: {name} {detail}")
+    """Hard assertion: a failed check fails the test (no soft PASS/FAIL)."""
+    assert condition, f"{name} {detail}"
 
 
 def test_schema_creation():

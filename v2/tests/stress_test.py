@@ -6,8 +6,15 @@ and checks for correctness, performance, and false positives.
 """
 import subprocess, json, time, os, sys
 
-AGENT_ID = 'surfaced-cto'
-HOOK_DIR = '/home/node/.happycapy/hooks/hermes'
+# Repo root by default; override for testing a deployed copy.
+HOOK_DIR = os.environ.get(
+    'ANAMNESIS_TEST_HOOK_DIR',
+    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+# Test agent id; hooks resolve identity from the payload cwd otherwise.
+AGENT_ID = os.environ.get('ANAMNESIS_TEST_AGENT', 'stress-test-agent')
+os.environ['ANAMNESIS_AGENT_ID'] = AGENT_ID
+os.environ.setdefault('ANAMNESIS_HOME',
+                      os.path.join(os.path.expanduser('~'), '.anamnesis-test'))
 outcomes = []
 
 
@@ -61,8 +68,8 @@ def main():
     # --- 3: Post Tool Use ---
     print('=== 3: post_tool_use ===')
     tools = [
-        ('Read', 'success', '/home/node/test.py', 'file contents here'),
-        ('Write', 'success', '/home/node/output.py', 'wrote 50 lines'),
+        ('Read', 'success', '/tmp/test.py', 'file contents here'),
+        ('Write', 'success', '/tmp/output.py', 'wrote 50 lines'),
         ('Bash', 'success', 'npm install', 'added 200 packages'),
         ('Bash', 'error', 'npm test', 'FAIL: 3 tests failed'),
         ('Read', 'error', '/nonexistent', 'FileNotFoundError'),

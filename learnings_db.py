@@ -1,20 +1,27 @@
 #!/usr/bin/env python3
-"""Hermes Micro-Cortex: Per-agent SQLite + FTS5 knowledge base.
+"""Anamnesis v1 knowledge store: per-agent SQLite + FTS5 knowledge base.
 
-Each agent gets its own learnings.db in ~/.happycapy/agents/<id>/learnings/.
-Provides: schema init, CRUD, FTS5 retrieval, dedup, and feedback credit.
+Each agent gets its own learnings.db under
+<data_home>/agents/<id>/learnings/ (data home: $ANAMNESIS_HOME or
+~/.anamnesis). Provides: schema init, CRUD, FTS5 retrieval, dedup, and
+feedback credit.
 
 Zero external dependencies. stdlib only."""
 
 import sqlite3
 import json
+import os
 import re
+import sys
 from pathlib import Path
 from datetime import datetime
 
-HAPPYCAPY_DIR = Path.home() / ".happycapy"
-AGENTS_DIR = HAPPYCAPY_DIR / "agents"
-CONFIG_PATH = HAPPYCAPY_DIR / "happycapy.json"
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import anamnesis_config
+
+
+def AGENTS_DIR() -> Path:
+    return anamnesis_config.agents_dir()
 
 # FTS5 stop words for query cleaning
 STOP_WORDS = frozenset({
@@ -36,7 +43,7 @@ CONFIDENCE_DECAY_RATE = 0.10  # 10% decay per maintenance cycle
 
 def db_path_for_agent(agent_id: str) -> Path:
     """Return path to agent's learnings.db."""
-    return AGENTS_DIR / agent_id / "learnings" / "learnings.db"
+    return AGENTS_DIR() / agent_id / "learnings" / "learnings.db"
 
 
 def open_db(agent_id: str) -> sqlite3.Connection:
@@ -341,44 +348,13 @@ def credit_surfaced(db: sqlite3.Connection, session_id: str) -> int:
 # AGENT DETECTION (shared utility)
 # ---------------------------------------------------------------------------
 
-def detect_active_agent() -> str:
-    """Find the active agent. Returns agent_id or empty string.
+def detect_active_agent(hook_input: dict = None) -> str:
+    """Resolve the active agent's identity. Never returns an empty string.
 
-    Detection order:
-    1. CAPY_AGENT_ID env var (set by HappyCapy runtime)
-    2. Scan happycapy.json for any active agent (all types)
-       - Prefer agents that already have a learnings/ dir
-       - Fall back to most recently created active agent
+    Delegates to anamnesis_config.resolve_agent_id(); accepts the parsed
+    hook payload so harness-provided identity and cwd are honored.
     """
-    env_agent = os.environ.get("CAPY_AGENT_ID", "")
-    if env_agent:
-        return env_agent
-    if not CONFIG_PATH.exists():
-        return ""
-    try:
-        config = json.loads(CONFIG_PATH.read_text())
-        agents = config.get("agents", {})
-        with_learnings = []
-        without_learnings = []
-        for aid, agent in agents.items():
-            if not agent.get("active", True):
-                continue
-            agent_dir = AGENTS_DIR / aid
-            if (agent_dir / "learnings").exists():
-                with_learnings.append((aid, agent.get("created", "")))
-            elif agent_dir.exists():
-                without_learnings.append((aid, agent.get("created", "")))
-        # Prefer agents that already have learnings
-        pool = with_learnings if with_learnings else without_learnings
-        if not pool:
-            return ""
-        if len(pool) == 1:
-            return pool[0][0]
-        # Most recently created
-        pool.sort(key=lambda x: x[1], reverse=True)
-        return pool[0][0]
-    except Exception:
-        return ""
+    return anamnesis_config.resolve_agent_id(hook_input)
 
 
 # ---------------------------------------------------------------------------
@@ -514,6 +490,3 @@ def log_event(db: sqlite3.Connection, event_type: str, metadata: dict = None):
     )
     db.commit()
 
-
-# Need os for detect_active_agent
-import os

@@ -1,8 +1,8 @@
-# Hermes v2 Architecture
+# Anamnesis Architecture
 
 ## Overview
 
-Hermes v2 is a production-grade agent intelligence platform implementing the Aristotelian epistemological hierarchy. It replaces v1's flat `rules` table with a typed knowledge graph, append-only event store, 5-step Sonnet reflection pipeline, dual-process retrieval, and three-signal feedback loop.
+Anamnesis is a production-grade agent memory platform implementing the Aristotelian epistemological hierarchy. It replaces v1's flat `rules` table with a typed knowledge graph, append-only event store, 5-step LLM reflection pipeline, dual-process retrieval, and three-signal feedback loop.
 
 **3,110 lines of Python. Zero external dependencies (stdlib only, except LLM calls).**
 
@@ -20,7 +20,7 @@ Each layer has increasing epistemic status. Knowledge flows upward through refle
 
 ## Database Schema
 
-**File:** `~/.happycapy/agents/<agent_id>/hermes/hermes.db` (SQLite, WAL mode)
+**File:** `<data_home>/agents/<agent_id>/anamnesis.db` (SQLite, WAL mode), where `<data_home>` is `$ANAMNESIS_HOME` or `~/.anamnesis`
 
 | Table | Purpose | Layer |
 |---|---|---|
@@ -162,11 +162,11 @@ stdio JSON-RPC server providing 5 tools for active agent cognition:
 
 | Tool | Purpose |
 |---|---|
-| `hermes_recall` | Active knowledge retrieval by query |
-| `hermes_record` | Immediate learning capture (bypass reflection) |
-| `hermes_feedback` | Explicit confirm/refute/irrelevant on a node |
-| `hermes_status` | Memory statistics |
-| `hermes_graph` | Graph traversal from a node |
+| `anamnesis_recall` | Active knowledge retrieval by query |
+| `anamnesis_record` | Immediate learning capture (bypass reflection) |
+| `anamnesis_feedback` | Explicit confirm/refute/irrelevant on a node |
+| `anamnesis_status` | Memory statistics |
+| `anamnesis_graph` | Graph traversal from a node |
 
 All handlers use `db = None` / `try/finally: if db: db.close()` pattern to prevent connection leaks.
 
@@ -181,7 +181,7 @@ Order matters: decay first so freshly-decayed nodes aren't promoted, then promot
 
 ## Hook Integration (Dual-Write)
 
-All hooks write to BOTH v1 (`learnings.db`) and v2 (`hermes.db`). v2 failures are caught and logged; they never affect v1 operation.
+All hooks write to BOTH v1 (`learnings.db`) and v2 (`anamnesis.db`). v2 failures are caught and logged; they never affect v1 operation.
 
 | Hook | v2 Action |
 |---|---|
@@ -195,7 +195,7 @@ All hooks use `try/finally` to close v2 DB connections even on error.
 
 ## Migration (`migrate.py`, 262 lines)
 
-One-time migration from v1 `learnings.db` to v2 `hermes.db`:
+One-time migration from v1 `learnings.db` to v2 `anamnesis.db`:
 
 - Each v1 rule -> `kg_node` (layer assigned by confidence: >= 0.85 -> episteme, else techne)
 - Carries over: confidence, helpful_count, category, severity, applies_when, timestamps
@@ -220,7 +220,7 @@ All tests use in-memory SQLite via `fixtures.create_test_db()`. No disk I/O, no 
 ## File Map
 
 ```
-~/.happycapy/hooks/hermes/v2/
+<anamnesis-repo>/v2/
   __init__.py              12 lines   Package init
   db.py                   824 lines   Core DB library (schema, CRUD, FTS5)
   migrate.py              262 lines   v1 -> v2 migration
@@ -243,7 +243,7 @@ All tests use in-memory SQLite via `fixtures.create_test_db()`. No disk I/O, no 
 
 ## Design Decisions
 
-1. **Separate `hermes.db`**: Zero risk to v1 data. Both coexist. v1 is the fallback.
+1. **Separate `anamnesis.db`**: Zero risk to v1 data. Both coexist. v1 is the fallback.
 2. **Sonnet over Haiku for reflection**: v1's 0.03% crystallization rate proves Haiku extraction produces too-shallow rules. Sonnet's 5-step pipeline produces causal, validated knowledge.
 3. **Three-signal feedback**: Refutation is the critical missing signal. A system that can only confirm, never refute, accumulates beliefs indefinitely.
 4. **CONTRADICTS edges block promotion**: Forces resolution rather than silent accumulation of inconsistencies.

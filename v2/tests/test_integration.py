@@ -41,13 +41,8 @@ _original_db_path_fn = None
 
 
 def check(name, condition, detail=""):
-    global passed, failed
-    if condition:
-        passed += 1
-        print(f"  PASS: {name}")
-    else:
-        failed += 1
-        print(f"  FAIL: {name} {detail}")
+    """Hard assertion: a failed check fails the test (no soft PASS/FAIL)."""
+    assert condition, f"{name} {detail}"
 
 
 def setup_module(module):
@@ -793,8 +788,16 @@ def test_empty_db_operations():
     results = retrieval.dual_retrieve(db, empty_agent, "anything", top_k=5)
     check("empty dual_retrieve is []", results == [])
 
+    # Sophia safety axioms are hardcoded and must fire even with zero
+    # knowledge-base coverage: an empty store still blocks rm -rf /.
     anti = retrieval.retrieve_anti_patterns(db, empty_agent, "rm -rf /")
-    check("empty anti_patterns is []", anti == [])
+    check("empty store: safety axiom fires", len(anti) >= 1)
+    check("empty store: axiom is critical",
+          any(m.get("severity") == "critical" and m.get("source") == "axiom"
+              for m in anti))
+    # ...but knowledge-based (non-axiom) matching has nothing to draw on
+    check("empty store: no KB-sourced matches",
+          all(m.get("source") == "axiom" for m in anti))
 
     maint = maintenance.maintenance_cycle(db, empty_agent)
     check("empty maintenance runs", isinstance(maint, dict))

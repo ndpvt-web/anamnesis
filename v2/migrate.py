@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Hermes v2 Migration: learnings.db (v1) -> hermes.db (v2).
+"""Anamnesis v1 -> v2 migration: learnings.db -> anamnesis.db.
 
 Each v1 rule becomes a kg_node with:
   - node_type='fact'
@@ -11,9 +11,9 @@ Idempotent: safe to re-run (skips duplicates).
 Non-destructive: learnings.db is read-only, never modified.
 
 Usage:
-  python3 migrate.py --agent surfaced-cto
-  python3 migrate.py --all
-  python3 migrate.py --agent surfaced-cto --dry-run
+  python3 -m v2.migrate --agent my-agent
+  python3 -m v2.migrate --all
+  python3 -m v2.migrate --agent my-agent --dry-run
 """
 
 import argparse
@@ -26,19 +26,17 @@ from pathlib import Path
 # Add parent to path for imports
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+import anamnesis_config
 from v2 import db as v2db
-
-HAPPYCAPY_DIR = Path.home() / ".happycapy"
-AGENTS_DIR = HAPPYCAPY_DIR / "agents"
-CONFIG_PATH = HAPPYCAPY_DIR / "happycapy.json"
 
 
 def find_agents_with_learnings() -> list:
     """Find all agent IDs that have a learnings.db."""
     agents = []
-    if not AGENTS_DIR.exists():
+    agents_root = anamnesis_config.agents_dir()
+    if not agents_root.exists():
         return agents
-    for agent_dir in AGENTS_DIR.iterdir():
+    for agent_dir in agents_root.iterdir():
         if not agent_dir.is_dir():
             continue
         learnings_db = agent_dir / "learnings" / "learnings.db"
@@ -49,7 +47,7 @@ def find_agents_with_learnings() -> list:
 
 def open_v1_db(agent_id: str) -> sqlite3.Connection:
     """Open v1 learnings.db read-only."""
-    path = AGENTS_DIR / agent_id / "learnings" / "learnings.db"
+    path = anamnesis_config.agents_dir() / agent_id / "learnings" / "learnings.db"
     if not path.exists():
         raise FileNotFoundError(f"No learnings.db for agent {agent_id}")
     db = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
@@ -219,7 +217,7 @@ def verify_migration(agent_id: str) -> dict:
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Hermes v1 -> v2 migration")
+    parser = argparse.ArgumentParser(description="Anamnesis v1 -> v2 migration")
     parser.add_argument("--agent", help="Migrate a specific agent")
     parser.add_argument("--all", action="store_true", help="Migrate all agents")
     parser.add_argument("--dry-run", action="store_true", help="Show what would be migrated")

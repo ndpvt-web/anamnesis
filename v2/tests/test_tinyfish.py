@@ -125,7 +125,7 @@ def test_seed_with_mock():
     ]
 
     with patch.object(tinyfish, 'TINYFISH_API_KEY', 'test-key'), \
-         patch.object(tinyfish, 'AI_GATEWAY_KEY', 'test-key'), \
+         patch.object(tinyfish.anamnesis_config, 'llm_config', return_value={'configured': True, 'api_key': 'test-key', 'base_url': 'http://x', 'model': 'm', 'provider': 'openai', 'key_source': 'test'}), \
          patch.object(tinyfish, '_tinyfish_search', return_value=mock_search), \
          patch.object(tinyfish, '_tinyfish_fetch', return_value=mock_fetch), \
          patch.object(tinyfish, '_call_llm_parse', return_value=mock_llm):
@@ -158,7 +158,7 @@ def test_seed_rejects_generic():
     ]
 
     with patch.object(tinyfish, 'TINYFISH_API_KEY', 'test-key'), \
-         patch.object(tinyfish, 'AI_GATEWAY_KEY', 'test-key'), \
+         patch.object(tinyfish.anamnesis_config, 'llm_config', return_value={'configured': True, 'api_key': 'test-key', 'base_url': 'http://x', 'model': 'm', 'provider': 'openai', 'key_source': 'test'}), \
          patch.object(tinyfish, '_tinyfish_search', return_value=mock_search), \
          patch.object(tinyfish, '_tinyfish_fetch', return_value=mock_fetch), \
          patch.object(tinyfish, '_call_llm_parse', return_value=mock_llm):
@@ -192,7 +192,7 @@ def test_confidence_capped():
     ]
 
     with patch.object(tinyfish, 'TINYFISH_API_KEY', 'test-key'), \
-         patch.object(tinyfish, 'AI_GATEWAY_KEY', 'test-key'), \
+         patch.object(tinyfish.anamnesis_config, 'llm_config', return_value={'configured': True, 'api_key': 'test-key', 'base_url': 'http://x', 'model': 'm', 'provider': 'openai', 'key_source': 'test'}), \
          patch.object(tinyfish, '_tinyfish_search', return_value=mock_search), \
          patch.object(tinyfish, '_tinyfish_fetch', return_value=mock_fetch), \
          patch.object(tinyfish, '_call_llm_parse', return_value=mock_llm):

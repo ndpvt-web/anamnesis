@@ -1,4 +1,4 @@
-"""Hermes v2: Aristotelian Memory Architecture for Agent Intelligence.
+"""Anamnesis: Aristotelian Memory Architecture for Agent Intelligence.
 
 Five-layer memory stack:
   L1 AISTHESIS  - Session-scoped working memory (ephemeral, 30-min TTL)

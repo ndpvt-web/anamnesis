@@ -250,7 +250,7 @@ def test_query_based_briefing():
                    layer=v2db.LAYER_TECHNE, error_family="E2_encoding")
     results = dual_retrieve(db, TEST_AGENT, "encoding UTF-8 BOM", top_k=3)
     briefing = format_query_based_briefing(db, TEST_AGENT, results)
-    assert "Hermes v2" in briefing
+    assert "Anamnesis" in briefing
     assert "TECHNE" in briefing or "Relevant" in briefing
     db.close()
 

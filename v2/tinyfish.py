@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tinyfish integration for Hermes v2: Didaxis (external teaching knowledge).
+"""Tinyfish integration for Anamnesis: Didaxis (external teaching knowledge).
 
 Three integration points:
   1. search_for_error()   -- real-time error lookup via Search API
@@ -7,7 +7,7 @@ Three integration points:
   3. seed_knowledge()     -- bootstrap KG with domain-specific knowledge
 
 Aristotelian justification:
-  Hermes currently has a closed epistemic loop (empeiria only).
+  Anamnesis currently has a closed epistemic loop (empeiria only).
   Tinyfish opens Didaxis -- knowledge from authoritative external sources.
   This complements experiential learning with curated web knowledge.
 
@@ -26,7 +26,9 @@ import urllib.error
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+import anamnesis_config
 from v2 import db as v2db
+from v2 import llm
 from v2.retrieval import classify_domain, classify_error_family
 
 # ---------------------------------------------------------------------------
@@ -36,13 +38,10 @@ from v2.retrieval import classify_domain, classify_error_family
 TINYFISH_API_KEY = os.environ.get("TINYFISH_API_KEY", "")
 SEARCH_URL = "https://api.search.tinyfish.ai"
 FETCH_URL = "https://api.fetch.tinyfish.ai"
-AI_GATEWAY_URL = "https://ai-gateway.happycapy.ai/api/v1/chat/completions"
-AI_GATEWAY_KEY = os.environ.get("AI_GATEWAY_API_KEY", "")
 
 # Seeding configuration
 SEED_QUERIES_PER_DOMAIN = 3
 MAX_FETCH_PER_SEED = 5
-SEED_MODEL = "anthropic/claude-haiku-4.5"  # Fast + cheap for parsing
 
 # Domain-specific seed queries (common pitfalls for each domain genus)
 DOMAIN_SEED_QUERIES = {
@@ -102,7 +101,7 @@ def _tinyfish_search(query: str, num_results: int = 5) -> list:
         url = f"{SEARCH_URL}?q={encoded_q}&num={num_results}&language=en"
         req = urllib.request.Request(url, headers={
             "X-API-Key": TINYFISH_API_KEY,
-            "User-Agent": "hermes-v2/1.0",
+            "User-Agent": "anamnesis/3.1",
         })
         with urllib.request.urlopen(req, timeout=10) as resp:
             data = json.loads(resp.read().decode("utf-8"))
@@ -110,7 +109,7 @@ def _tinyfish_search(query: str, num_results: int = 5) -> list:
         return [{"title": r.get("title", ""), "url": r.get("url", ""),
                  "snippet": r.get("snippet", "")} for r in results[:num_results]]
     except Exception as e:
-        print(f"[hermes-v2] tinyfish search error: {e}", file=sys.stderr)
+        print(f"[anamnesis] tinyfish search error: {e}", file=sys.stderr)
         return []
 
 
@@ -123,7 +122,7 @@ def _tinyfish_fetch(urls: list, fmt: str = "markdown") -> list:
         req = urllib.request.Request(FETCH_URL, data=payload, headers={
             "X-API-Key": TINYFISH_API_KEY,
             "Content-Type": "application/json",
-            "User-Agent": "hermes-v2/1.0",
+            "User-Agent": "anamnesis/3.1",
         }, method="POST")
         with urllib.request.urlopen(req, timeout=30) as resp:
             data = json.loads(resp.read().decode("utf-8"))
@@ -131,41 +130,15 @@ def _tinyfish_fetch(urls: list, fmt: str = "markdown") -> list:
         return [{"url": r.get("url", ""), "text": r.get("text", "")[:3000]}
                 for r in results if r.get("text")]
     except Exception as e:
-        print(f"[hermes-v2] tinyfish fetch error: {e}", file=sys.stderr)
+        print(f"[anamnesis] tinyfish fetch error: {e}", file=sys.stderr)
         return []
 
 
 def _call_llm_parse(system: str, prompt: str, timeout: float = 15) -> dict:
-    """Call AI Gateway to parse web content into structured knowledge."""
-    if not AI_GATEWAY_KEY:
-        return {}
-    payload = json.dumps({
-        "model": SEED_MODEL,
-        "max_tokens": 2048,
-        "temperature": 0,
-        "messages": [{"role": "user", "content": prompt}],
-        "system": system,
-    }).encode("utf-8")
-    req = urllib.request.Request(AI_GATEWAY_URL, data=payload, headers={
-        "Content-Type": "application/json",
-        "Authorization": f"Bearer {AI_GATEWAY_KEY}",
-        "User-Agent": "hermes-v2/1.0",
-    }, method="POST")
-    try:
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
-            raw = resp.read().decode("utf-8")
-        data = json.loads(raw)
-        content = data["choices"][0]["message"]["content"].strip()
-        if content.startswith("```"):
-            first_nl = content.find("\n")
-            if first_nl != -1:
-                content = content[first_nl + 1:]
-            if content.endswith("```"):
-                content = content[:-3].rstrip()
-        return json.loads(content)
-    except Exception as e:
-        print(f"[hermes-v2] tinyfish LLM parse error: {e}", file=sys.stderr)
-        return {}
+    """Parse web content into structured knowledge with the fast model."""
+    result = llm.chat_json(system, prompt, purpose="fast",
+                           timeout=timeout, max_tokens=2048)
+    return result if isinstance(result, (dict, list)) else {}
 
 
 # ---------------------------------------------------------------------------
@@ -201,7 +174,7 @@ def search_for_error(error_text: str, tool_name: str = "",
         return ""
 
     # Format as ephemeral context (not stored in KG)
-    lines_out = ["## Hermes: Web Search Results (Tinyfish)"]
+    lines_out = ["## Anamnesis: Web Search Results (Tinyfish)"]
     for r in results[:3]:
         title = r["title"][:80]
         snippet = r["snippet"][:200]
@@ -249,7 +222,7 @@ def enrich_with_web_context(error_signatures: list,
 # Point 3: Knowledge Seeding
 # ---------------------------------------------------------------------------
 
-SEED_SYSTEM_PROMPT = """You are a knowledge extraction system for the Hermes AI memory architecture.
+SEED_SYSTEM_PROMPT = """You are a knowledge extraction system for the Anamnesis memory architecture.
 Given web content about common programming errors and solutions, extract structured knowledge entries.
 
 Each entry MUST follow the WHEN/THEN/BECAUSE format:
@@ -292,9 +265,9 @@ def seed_knowledge(db, agent_id: str, domains: list = None,
     if not TINYFISH_API_KEY:
         return {"nodes_created": 0, "domains_seeded": [],
                 "errors": ["TINYFISH_API_KEY not set"]}
-    if not AI_GATEWAY_KEY:
+    if not anamnesis_config.llm_config("fast")["configured"]:
         return {"nodes_created": 0, "domains_seeded": [],
-                "errors": ["AI_GATEWAY_API_KEY not set"]}
+                "errors": ["no LLM API key configured (ANAMNESIS_LLM_API_KEY)"]}
 
     if domains is None:
         domains = list(DOMAIN_SEED_QUERIES.keys())
@@ -309,7 +282,7 @@ def seed_knowledge(db, agent_id: str, domains: list = None,
             continue
 
         domain_nodes = 0
-        print(f"[hermes-v2] seeding domain: {domain} ({len(queries)} queries)",
+        print(f"[anamnesis] seeding domain: {domain} ({len(queries)} queries)",
               file=sys.stderr)
 
         for query in queries[:SEED_QUERIES_PER_DOMAIN]:
@@ -368,18 +341,18 @@ def seed_knowledge(db, agent_id: str, domains: list = None,
                         )
                         if node_id > 0:
                             domain_nodes += 1
-                            print(f"[hermes-v2] seeded node {node_id} "
+                            print(f"[anamnesis] seeded node {node_id} "
                                   f"({domain}): {content[:50]}",
                                   file=sys.stderr)
 
             except Exception as e:
                 errors.append(f"{domain}/{query[:30]}: {e}")
-                print(f"[hermes-v2] seed error: {e}", file=sys.stderr)
+                print(f"[anamnesis] seed error: {e}", file=sys.stderr)
 
         if domain_nodes > 0:
             seeded_domains.append(domain)
             total_nodes += domain_nodes
-            print(f"[hermes-v2] seeded {domain_nodes} nodes for {domain}",
+            print(f"[anamnesis] seeded {domain_nodes} nodes for {domain}",
                   file=sys.stderr)
 
     return {
@@ -395,7 +368,7 @@ def seed_knowledge(db, agent_id: str, domains: list = None,
 
 if __name__ == "__main__":
     import argparse
-    parser = argparse.ArgumentParser(description="Hermes v2 Knowledge Seeder (Tinyfish)")
+    parser = argparse.ArgumentParser(description="Anamnesis Knowledge Seeder (Tinyfish)")
     parser.add_argument("agent_id", help="Agent ID to seed knowledge for")
     parser.add_argument("--domains", nargs="*", help="Specific domains to seed")
     parser.add_argument("--list-domains", action="store_true",

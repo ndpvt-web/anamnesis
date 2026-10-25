@@ -237,7 +237,7 @@ def promote_candidates(db: sqlite3.Connection, agent_id: str) -> dict:
             WHERE id = ?
         """, (v2db.LAYER_EPISTEME, "crystallized", nid))
         promoted_ids.append(nid)
-        print(f"[hermes-v2] Promoted node {nid} to episteme/crystallized", file=sys.stderr)
+        print(f"[anamnesis] Promoted node {nid} to episteme/crystallized", file=sys.stderr)
 
     if promoted_ids:
         db.commit()
@@ -345,7 +345,7 @@ def decay_stale_nodes(db: sqlite3.Connection, agent_id: str,
                 (new_conf, nid)
             )
             deprecated_count += 1
-            print(f"[hermes-v2] Deprecated node {nid} (ebbinghaus: {old_conf:.3f}->{new_conf:.3f}, "
+            print(f"[anamnesis] Deprecated node {nid} (ebbinghaus: {old_conf:.3f}->{new_conf:.3f}, "
                   f"helpful={helpful}, days={days_elapsed:.0f})", file=sys.stderr)
         else:
             new_conf = max(0.15, new_conf)
@@ -391,7 +391,7 @@ def demote_stale_episteme(db: sqlite3.Connection, agent_id: str,
             UPDATE kg_nodes SET layer = ?, maturity = 'established',
             last_seen = datetime('now') WHERE id = ?
         """, (v2db.LAYER_TECHNE, nid))
-        print(f"[hermes-v2] Demoted node {nid} from episteme to techne", file=sys.stderr)
+        print(f"[anamnesis] Demoted node {nid} from episteme to techne", file=sys.stderr)
 
     if demote_ids:
         db.commit()

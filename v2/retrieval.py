@@ -156,7 +156,7 @@ def dual_retrieve(db, agent_id: str, query: str, top_k: int = 5,
         fts_results = v2db.fts5_search(
             db, error_family.replace("_", " "), agent_id, top_k=top_k * 2
         )
-    print(f"[hermes-v2] dual_retrieve: FTS5 returned {len(fts_results)} results "
+    print(f"[anamnesis] dual_retrieve: FTS5 returned {len(fts_results)} results "
           f"(domain={query_domain})", file=sys.stderr)
 
     # Build a dict of node_id -> result dict for dedup tracking
@@ -188,7 +188,7 @@ def dual_retrieve(db, agent_id: str, query: str, top_k: int = 5,
             try:
                 related = kg.find_related_nodes(db, agent_id, seed_id, max_depth=1, max_nodes=20)
             except Exception as e:
-                print(f"[hermes-v2] graph expand error for node {seed_id}: {e}", file=sys.stderr)
+                print(f"[anamnesis] graph expand error for node {seed_id}: {e}", file=sys.stderr)
                 related = []
 
             # Build graph_context summary from this seed's related nodes
@@ -300,7 +300,7 @@ def dual_retrieve(db, agent_id: str, query: str, top_k: int = 5,
         if len(final) >= top_k:
             break
 
-    print(f"[hermes-v2] dual_retrieve: returning {len(final)} results "
+    print(f"[anamnesis] dual_retrieve: returning {len(final)} results "
           f"(top_k={top_k}, threshold={abs_threshold:.3f} ({threshold_ratio:.0%}), "
           f"active_nodes={total_active})",
           file=sys.stderr)
@@ -311,7 +311,7 @@ def retrieve_for_error(db, agent_id: str, error_text: str, top_k: int = 3) -> li
     """Specialized retrieval for error context.
     Searches across all categories (not just anti_pattern).
     Returns same format as dual_retrieve."""
-    print(f"[hermes-v2] retrieve_for_error: searching for error context", file=sys.stderr)
+    print(f"[anamnesis] retrieve_for_error: searching for error context", file=sys.stderr)
     fts_results = v2db.fts5_search(db, error_text, agent_id, top_k=top_k)
 
     results = []
@@ -545,7 +545,7 @@ def format_query_based_briefing(db, agent_id: str, results: list) -> str:
     if not results:
         return format_session_briefing(db, agent_id)  # Fallback
 
-    lines = [f"## Hermes v2: Relevant Knowledge ({agent_id})"]
+    lines = [f"## Anamnesis: Relevant Knowledge ({agent_id})"]
 
     # Always include sophia axioms
     axioms = v2db.get_axioms(db, agent_id)[:3]
@@ -577,7 +577,7 @@ def format_session_briefing(db, agent_id: str) -> str:
     """Generate session start briefing string.
     Shows nodes grouped by layer (Sophia first, then Episteme, then Techne).
     Format:
-      ## Hermes v2: Agent Knowledge ({agent_id})
+      ## Anamnesis: Agent Knowledge ({agent_id})
       ### SOPHIA (Axioms)
       - [content]
       ### EPISTEME (Validated Knowledge)
@@ -600,7 +600,7 @@ def format_session_briefing(db, agent_id: str) -> str:
     if not axioms and not episteme_nodes and not techne_nodes:
         return ""
 
-    lines.append(f"## Hermes v2: Agent Knowledge ({agent_id})")
+    lines.append(f"## Anamnesis: Agent Knowledge ({agent_id})")
 
     if axioms:
         lines.append("### SOPHIA (Axioms)")

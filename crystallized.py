@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Hermes Layer 4: Crystallized Knowledge.
+"""Anamnesis Layer 4: Crystallized Knowledge.
 
 Promotion engine for battle-tested rules. Rules that prove themselves
 through repeated use, high confidence, and positive feedback get promoted
